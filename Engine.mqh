@@ -53,11 +53,8 @@ private:
     int zigzagHandle;
     double offsetPrice; // in price ex 0.00010
     double resistance;
-    double upperPriceBuy;
-    double lowerPriceBuy;
     double support;
-    double upperPriceSell;
-    double lowerPriceSell;
+    bool isTrendUp;
     bool initZigZag();
     void calculateSR();
     void calculateZigzag();
@@ -102,6 +99,8 @@ private:
     // Statistics
     int consecutiveLoss;
     int consecutiveWin;
+    int maxConsecutiveLoss;
+    int maxConsecutiveWin;
 
 public:
     Engine();
@@ -109,7 +108,7 @@ public:
 
     // Set Variable
     void setTradingWindow(string BeginOrder, string EndOrder);
-    void setRiskReward(double RiskPercentage, double RiskReward);
+    void setRiskReward(double RiskPercentage, double RiskReward, double MaxVolume);
     void setSafety(double StopLossPip, double TrailingStopPip, int PauseTrailing, long MaxSpreadPip);
     void setOffset(double OffsetPip);
     void setMagicNumber(ulong magicNumber);
@@ -135,6 +134,8 @@ Engine::Engine() {
     historyLast = 0;
     consecutiveLoss = 0;
     consecutiveWin = 0;
+    maxConsecutiveLoss = 0;
+    maxConsecutiveWin = 0;
     noTrailing = 0;
 }
 
@@ -149,9 +150,10 @@ void Engine::setTradingWindow( string BeginOrder, string EndOrder) {
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-void Engine::setRiskReward(double RiskPercentage, double RiskReward) {
+void Engine::setRiskReward(double RiskPercentage, double RiskReward, double MaxVolume) {
     riskPercentage = RiskPercentage;
     riskReward = RiskReward;
+    maxVolume = MaxVolume;
 }
 
 //+------------------------------------------------------------------+
@@ -207,7 +209,8 @@ void Engine::initVolume() {
     digitVolume = getDigit(stepVolume);
     minVolume = SymbolInfoDouble(Symbol(),SYMBOL_VOLUME_MIN);
     minVolume = NormalizeDouble(minVolume, digitVolume);
-    maxVolume = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MAX);
+    double maxVolumeSymbol = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MAX);
+    maxVolume = maxVolumeSymbol > maxVolume ? maxVolume : maxVolumeSymbol;
     maxVolume = NormalizeDouble(maxVolume, digitVolume);
 }
 
@@ -279,25 +282,34 @@ void Engine::calculateSR() {
 
     double ask = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
     double bid = SymbolInfoDouble(Symbol(), SYMBOL_BID);
-    int pipToPoint = (Digits() == 3 || Digits() == 5) ? 10 : 1;
-    double spread = NormalizeDouble(maxSpread * pipToPoint * Point(), Digits());
+    long spread = SymbolInfoInteger(Symbol(), SYMBOL_SPREAD);
 
-    upperPriceBuy = NormalizeDouble(resistance + offsetPrice + spread, Digits());
-    lowerPriceBuy = NormalizeDouble(resistance + offsetPrice, Digits());
-
-    upperPriceSell = NormalizeDouble(support - offsetPrice, Digits());
-    lowerPriceSell = NormalizeDouble(support - offsetPrice - spread, Digits());
-    string s = DoubleToString(support, Digits());
-    string r = DoubleToString(resistance, Digits());
-    string msg = "Support/Resistance: "  + s + "/" + r;
+    string msg = "Support/Resistance: "  + DoubleToString(support, Digits()) + "/" + DoubleToString(resistance, Digits());
     static string lastMsg = "";
     if(msg != lastMsg) {
         Print(msg);
-    } else{
-        if(consecutiveLoss > 1) {
-            allowOrder = false;
-        }
+    } else {
+        allowOrder = false;
     }
+
+    if(ask >= resistance) {
+        allowOrder = false;
+    }
+
+    if(bid <= support) {
+        allowOrder = false;
+    }
+
+    if(spread >= maxSpread) {
+        string msg = "⛔️ Spread is high (" + IntegerToString(spread) + " > " + IntegerToString(maxSpread) + ")";
+        //Print(msg);
+        allowOrder = false;
+    }
+
+    if(resistance <= 0 || support <= 0) {
+        allowOrder = false;
+    }
+
     lastMsg = msg;
 }
 
@@ -310,32 +322,20 @@ void Engine::createOrder() {
         return;
     }
 
-    if(resistance <= 0 || support <= 0) {
-        string msg = "⛔️ Support / Resistance Error";
-        Print(msg);
-        return;
-    }
-
     clearAllOrders();
 
     double ask = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
     double bid = SymbolInfoDouble(Symbol(), SYMBOL_BID);
     long spread = SymbolInfoInteger(Symbol(), SYMBOL_SPREAD);
 
-    if(spread >= maxSpread) {
-        string msg = "⛔️ Spread is high (" + IntegerToString(spread) + " > " + IntegerToString(maxSpread) + ")";
-        //Print(msg);
-        return;
-    }
-
-    if(bid < upperPriceBuy && bid > lowerPriceBuy) {
+    if(ask > resistance) {
         Print("Ask/Bid/Spread: " + DoubleToString(ask, Digits()) + "/" + DoubleToString(bid, Digits()) + "/" + IntegerToString(spread));
         double volume = calculateVolume();
         orderBuy(ask, volume);
         return;
     }
 
-    if(ask < upperPriceSell && ask > lowerPriceSell) {
+    if(bid < support) {
         Print("Ask/Bid/Spread: " + DoubleToString(ask, Digits()) + "/" + DoubleToString(bid, Digits()) + "/" + IntegerToString(spread));
         double volume = calculateVolume();
         orderSell(bid, volume);
@@ -567,15 +567,17 @@ void Engine::onTrade() {
         int pipToPoint = (Digits() == 3 || Digits() == 5) ? 10 : 1;
         double deltaPip = deltaPrice/(pipToPoint * Point());
 
-        double ppp = dealProfit/deltaPip;
+        double ppp = deltaPip != 0 ? dealProfit/deltaPip : 0.0;
         if(dealProfit > 0) {
             consecutiveLoss = 0;
             consecutiveWin ++;
+            maxConsecutiveWin = consecutiveWin > maxConsecutiveWin ? consecutiveWin : maxConsecutiveWin;
         } else {
             consecutiveWin = 0;
             consecutiveLoss ++;
+            maxConsecutiveLoss = consecutiveLoss > maxConsecutiveLoss ? consecutiveLoss : maxConsecutiveLoss;
         }
-        
+
         Print("-----------------------------");
         Print("Id: " + IntegerToString(positionId));
         Print("Position: " + direction);
@@ -587,6 +589,7 @@ void Engine::onTrade() {
         Print("Profit/Pip/Lot: " + DoubleToString(ppp/volume, Digits()));
         Print("Ask/Bid/Spread: " + ask + "/" + bid + "/" + spread);
         Print("Consecutive Win/Loss: " + IntegerToString(consecutiveWin) + "/" + IntegerToString(consecutiveLoss));
+        Print("Max Consecutive Win/Loss: " + IntegerToString(maxConsecutiveWin) + "/" + IntegerToString(maxConsecutiveLoss));
         Print("-----------------------------");
         break;
     }
@@ -737,8 +740,41 @@ void Engine::calculateZigzag() {
         }
     }
 
-    resistance = NormalizeDouble(highest, Digits());
-    support = NormalizeDouble(lowest, Digits());
+    isTrendUp = iH < iL;
+    double highest2 = highest;
+    double lowest2 = lowest;
+    if(isTrendUp) {
+        // Get Last High ZigZag
+        if(iL < barCalc) {
+            for (int i = iL; i < barCalc; i++) {
+                if (bufferHigh[i] != EMPTY_VALUE && bufferHigh[i] > 0) {
+                    highest2 = bufferHigh[i];
+                    break;
+                }
+            }
+        }
+    } else {
+        // Get Last Low ZigZag
+        if(iH < barCalc) {
+            for (int i = iH; i < barCalc; i++) {
+                if (bufferLow[i] != EMPTY_VALUE && bufferLow[i] > 0) {
+                    lowest2 = bufferLow[i];
+                    break;
+                }
+            }
+        }
+    }
+
+    if(isTrendUp) {
+        resistance = highest2 >  highest ? highest2 : highest;
+        support = lowest;
+    } else {
+        resistance = highest;
+        support = lowest2 < lowest ? lowest2 : lowest;
+    }
+
+    resistance = NormalizeDouble(resistance, Digits());
+    support = NormalizeDouble(support, Digits());
 }
 
 //+------------------------------------------------------------------+
