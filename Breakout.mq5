@@ -15,6 +15,7 @@ input string _end = "15:30";   // End Order Time (hh:mm) (Server Time)
 input group "risk Management";
 input double _risk = 1;              // Risk (%)
 input double _riskReward = 10;       // Risk/Reward Ratio
+input double _maxVolume = 10;           // Maximum Volume (lot)
 input double _stopLossPip = 1.8;     // Stop Loss (pip)
 input double _trailingStopPip = 1.8; // Trailing Stop (pip)
 input int _pauseTrailing = 1;        // Pause Before First Trailing (seconds)
@@ -31,7 +32,7 @@ Engine e;
 //+------------------------------------------------------------------+
 int OnInit() {
     e.setTradingWindow(_start, _end);
-    e.setRiskReward(_risk, _riskReward);
+    e.setRiskReward(_risk, _riskReward, _maxVolume);
     e.setSafety(_stopLossPip, _trailingStopPip, _pauseTrailing, _maxSpreadPip);
     e.setOffset(_offsetPip);
     e.setMagicNumber(_magicNumber);
