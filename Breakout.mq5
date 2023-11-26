@@ -3,7 +3,7 @@
 //|                                             Copyright 2023, Yohan Naftali |
 //+---------------------------------------------------------------------------+
 #property copyright "Copyright 2023, Yohan Naftali"
-#property version   "231.114"
+#property version   "231.126"
 
 #include "Engine.mqh"
 
@@ -21,6 +21,7 @@ input double _trailingStopPip = 1.8; // Trailing Stop (pip)
 input int _pauseTrailing = 1;        // Pause Before First Trailing (seconds)
 input long _maxSpreadPip = 8;        // Maximum spread (pip)
 input double _offsetPip = 0;         // Offset Upper/Lower From S/R (pip)
+input int _pivotNo = 3;              // No of Pivot Point
 
 input group "Expert Advisor"
 input ulong _magicNumber = 99999;    // EA's MagicNumber
@@ -34,7 +35,7 @@ int OnInit() {
     e.setTradingWindow(_start, _end);
     e.setRiskReward(_risk, _riskReward, _maxVolume);
     e.setSafety(_stopLossPip, _trailingStopPip, _pauseTrailing, _maxSpreadPip);
-    e.setOffset(_offsetPip);
+    e.setOffset(_offsetPip, _pivotNo);
     e.setMagicNumber(_magicNumber);
     EventSetTimer(1);
     return (e.onInit());
