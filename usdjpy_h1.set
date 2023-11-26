@@ -1,0 +1,15 @@
+; Trading Window
+_start=00:00
+_end=23:59
+; risk Management
+_risk=1.0
+_riskReward=10.0
+_maxVolume=100.0
+_stopLossPip=0.6
+_trailingStopPip=15.7
+_pauseTrailing=28
+_maxSpreadPip=14
+_offsetPip=1.0
+_pivotNo=7
+; Expert Advisor
+_magicNumber=3
