@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2023, Yohan Naftali"
 #property link      "https://yohanli.com"
-#property version   "231.114"
+#property version   "231.126"
 
 #include <Trade\Trade.mqh>
 #include <Trade\SymbolInfo.mqh>
@@ -18,7 +18,7 @@
 //|                                                                  |
 //+------------------------------------------------------------------+
 class Engine {
-private:
+  private:
     CTrade trade;
     CDealInfo deal;
     COrderInfo order;
@@ -52,9 +52,9 @@ private:
     // Indicators
     int zigzagHandle;
     double offsetPrice; // in price ex 0.00010
+    int pivotNo;
     double resistance;
     double support;
-    bool isTrendUp;
     bool initZigZag();
     void calculateSR();
     void calculateZigzag();
@@ -102,7 +102,7 @@ private:
     int maxConsecutiveLoss;
     int maxConsecutiveWin;
 
-public:
+  public:
     Engine();
     ~Engine();
 
@@ -110,7 +110,7 @@ public:
     void setTradingWindow(string BeginOrder, string EndOrder);
     void setRiskReward(double RiskPercentage, double RiskReward, double MaxVolume);
     void setSafety(double StopLossPip, double TrailingStopPip, int PauseTrailing, long MaxSpreadPip);
-    void setOffset(double OffsetPip);
+    void setOffset(double OffsetPip, int PivotNo);
     void setMagicNumber(ulong magicNumber);
 
     // Events
@@ -171,9 +171,10 @@ void Engine::setSafety(double StopLossPip, double TrailingStopPip, int PauseTrai
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-void Engine::setOffset(double OffsetPip) {
+void Engine::setOffset(double OffsetPip, int PivotNo) {
     int pipToPoint = (Digits() == 3 || Digits() == 5) ? 10 : 1;
     offsetPrice = NormalizeDouble(OffsetPip * pipToPoint * Point(), Digits());
+    pivotNo = PivotNo;
 }
 
 //+------------------------------------------------------------------+
@@ -712,68 +713,64 @@ double Engine::takeProfitMargin() {
 //+------------------------------------------------------------------+
 void Engine::calculateZigzag() {
     int barCalc = BarsCalculated(zigzagHandle);
-    double highest = 0;
+
+    int noOfPivot = pivotNo;
+
+    // Highest
+    double highest[];
+    ArrayResize(highest, noOfPivot + 1);
     double bufferHigh[];
     ArrayResize(bufferHigh, barCalc);
     CopyBuffer(zigzagHandle, 1, 0, barCalc, bufferHigh);
     ArraySetAsSeries(bufferHigh, true);
+
+    int index = 0;
     int iH = 0;
     for(int i = 0; i < barCalc; i++) {
+        if(index == (noOfPivot + 1)) break;
         if(bufferHigh[i] != EMPTY_VALUE && bufferHigh[i] > 0) {
-            highest = bufferHigh[i];
-            iH = i+1;
-            break;
+            highest[index] = bufferHigh[i];
+            if(index == 0) {
+                iH = i+1;
+            }
+            index++;
         }
     }
 
-    double lowest = 0;
+    double lowest[];
+    ArrayResize(lowest, noOfPivot + 1);
     double bufferLow[];
     ArrayResize(bufferLow, barCalc);
     CopyBuffer(zigzagHandle, 2, 0, barCalc, bufferLow);
     ArraySetAsSeries(bufferLow, true);
+
+    index = 0;
     int iL = 0;
     for(int i = 0; i < barCalc; i++) {
+        if(index == (noOfPivot + 1)) break;
         if(bufferLow[i] != EMPTY_VALUE && bufferLow[i] > 0) {
-            lowest = bufferLow[i];
-            iL = i+1;
-            break;
-        }
-    }
-
-    isTrendUp = iH < iL;
-    double highest2 = highest;
-    double lowest2 = lowest;
-    if(isTrendUp) {
-        // Get Last High ZigZag
-        if(iL < barCalc) {
-            for (int i = iL; i < barCalc; i++) {
-                if (bufferHigh[i] != EMPTY_VALUE && bufferHigh[i] > 0) {
-                    highest2 = bufferHigh[i];
-                    break;
-                }
+            lowest[index] = bufferLow[i];
+            if(index == 0) {
+                iL = i+1;
             }
-        }
-    } else {
-        // Get Last Low ZigZag
-        if(iH < barCalc) {
-            for (int i = iH; i < barCalc; i++) {
-                if (bufferLow[i] != EMPTY_VALUE && bufferLow[i] > 0) {
-                    lowest2 = bufferLow[i];
-                    break;
-                }
-            }
+            index++;
         }
     }
 
-    if(isTrendUp) {
-        resistance = highest2 >  highest ? highest2 : highest;
-        support = lowest;
-    } else {
-        resistance = highest;
-        support = lowest2 < lowest ? lowest2 : lowest;
-    }
+    bool isTrendUp = iH < iL;
 
+    int startMax = isTrendUp ? 1 : 0;
+    int endMax = isTrendUp ? noOfPivot + 1 : noOfPivot;
+    int highestIndex = ArrayMaximum(highest, startMax, endMax);
+
+    resistance = highest[highestIndex];
     resistance = NormalizeDouble(resistance, Digits());
+
+    int startMin = isTrendUp ? 0 : 1;
+    int endMin = isTrendUp ? noOfPivot : noOfPivot + 1;
+    int lowestIndex = ArrayMinimum(lowest, startMin, endMin);
+
+    support = lowest[lowestIndex];
     support = NormalizeDouble(support, Digits());
 }
 
@@ -817,4 +814,5 @@ void Engine::onDeinit(const int reason) {
     Comment("");
 }
 
+//+------------------------------------------------------------------+
 //+------------------------------------------------------------------+
