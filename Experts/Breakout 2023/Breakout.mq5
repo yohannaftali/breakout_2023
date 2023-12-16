@@ -3,28 +3,28 @@
 //|                                             Copyright 2023, Yohan Naftali |
 //+---------------------------------------------------------------------------+
 #property copyright "Copyright 2023, Yohan Naftali"
-#property version   "231.126"
+#property link      "https://github.com/yohannaftali"
+#property version   "231.204"
 
 #include "Engine.mqh"
 
 //--- input parameters
 input group "Trading Window";
-input string _start = "03:50"; // Start Order Time (hh:mm) (Server Time)
-input string _end = "15:30";   // End Order Time (hh:mm) (Server Time)
+input string start = "00:00";       // Start Order Time (hh:mm) (Server Time)
+input string end = "23:59";         // End Order Time (hh:mm) (Server Time)
 
-input group "risk Management";
-input double _risk = 1;              // Risk (%)
-input double _riskReward = 10;       // Risk/Reward Ratio
-input double _maxVolume = 10;           // Maximum Volume (lot)
-input double _stopLossPip = 1.8;     // Stop Loss (pip)
-input double _trailingStopPip = 1.8; // Trailing Stop (pip)
-input int _pauseTrailing = 1;        // Pause Before First Trailing (seconds)
-input long _maxSpreadPip = 8;        // Maximum spread (pip)
-input double _offsetPip = 0;         // Offset Upper/Lower From S/R (pip)
-input int _pivotNo = 3;              // No of Pivot Point
+input group "Risk Management";
+input double risk = 1;              // Risk (%)
+input double riskReward = 10;       // Risk/Reward Ratio
+input double stopLossPip = 0.8;     // Stop Loss (pip)
+input double trailingStopPip = 0.8; // Trailing Stop (pip)
+input int pauseTrailing = 1;        // Pause Between Trailing (seconds)
+input long maxSpreadPip = 10;       // Maximum spread (pip)
+input double offsetPip = 0;         // Offset Upper/Lower From S/R (pip)
+input int pivotNo = 3;              // No of Pivot Point
 
 input group "Expert Advisor"
-input ulong _magicNumber = 99999;    // EA's MagicNumber
+input ulong magicNumber = 1;        // EA's MagicNumber
 
 Engine e;
 
@@ -32,11 +32,11 @@ Engine e;
 //|                                                                  |
 //+------------------------------------------------------------------+
 int OnInit() {
-    e.setTradingWindow(_start, _end);
-    e.setRiskReward(_risk, _riskReward, _maxVolume);
-    e.setSafety(_stopLossPip, _trailingStopPip, _pauseTrailing, _maxSpreadPip);
-    e.setOffset(_offsetPip, _pivotNo);
-    e.setMagicNumber(_magicNumber);
+    e.setTradingWindow(start, end);
+    e.setRiskReward(risk, riskReward);
+    e.setSafety(stopLossPip, trailingStopPip, pauseTrailing, maxSpreadPip);
+    e.setOffset(offsetPip, pivotNo);
+    e.setMagicNumber(magicNumber);
     EventSetTimer(1);
     return (e.onInit());
 }
